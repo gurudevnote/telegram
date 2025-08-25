@@ -5,7 +5,7 @@ namespace SocialiteProviders\Telegram;
 use Illuminate\Support\Facades\Validator;
 use InvalidArgumentException;
 use SocialiteProviders\Manager\OAuth2\AbstractProvider;
-use SocialiteProviders\Manager\OAuth2\User;
+use \Laravel\Socialite\Two\User;
 
 class Provider extends AbstractProvider
 {
@@ -29,44 +29,6 @@ class Provider extends AbstractProvider
     /**
      * {@inheritdoc}
      */
-    protected function getUserByToken($token)
-    {
-        return null;
-    }
-
-    public function getButton()
-    {
-        $botname = $this->getConfig('bot');
-        $callbackUrl = $this->redirectUrl;
-
-        return sprintf(
-            '<script async src="https://telegram.org/js/telegram-widget.js" data-telegram-login="%s" data-size="large" data-userpic="false" data-auth-url="%s" data-request-access="write"></script>',
-            $botname,
-            $callbackUrl
-        );
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function redirect()
-    {
-        return '<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="UTF-8" />
-
-        <title>Login using Telegram</title>
-    </head>
-    <body>
-        '.$this->getButton().'
-    </body>
-</html>';
-    }
-
-    /**
-     * {@inheritdoc}
-     */
     protected function mapUserToObject(array $user)
     {
         $name = trim(sprintf('%s %s', $user['first_name'] ?? '', $user['last_name'] ?? ''));
@@ -82,9 +44,20 @@ class Provider extends AbstractProvider
     /**
      * {@inheritdoc}
      */
-    public function user()
+    protected function getUserByToken($token)
     {
-        $validator = Validator::make($this->request->all(), [
+        $pramKeyValues = explode('&', $token);
+
+        $paramas = [];
+
+        foreach ($pramKeyValues as $keyValue) {
+            $keyValues = explode('=', $keyValue);
+            if (count($keyValues) === 2) {
+                $paramas[$keyValues[0]] = rawurldecode($keyValues[1]);
+            }
+        }
+
+        $validator = Validator::make($paramas, [
             'id'        => 'required|numeric',
             'auth_date' => 'required|date_format:U|before:1 day',
             'hash'      => 'required|size:64',
@@ -92,7 +65,10 @@ class Provider extends AbstractProvider
 
         throw_if($validator->fails(), InvalidArgumentException::class);
 
-        $dataToHash = collect($this->request->except('hash'))
+        $hash = $paramas['hash'];
+        unset($paramas['hash']);
+
+        $dataToHash = collect($paramas)
             ->transform(fn ($val, $key) => "$key=$val")
             ->sort()
             ->join("\n");
@@ -101,10 +77,12 @@ class Provider extends AbstractProvider
         $hash_hmac = hash_hmac('sha256', $dataToHash, $hash_key);
 
         throw_if(
-            $this->request->hash !== $hash_hmac,
+            $hash !== $hash_hmac,
             InvalidArgumentException::class
         );
 
-        return $this->mapUserToObject($this->request->except(['auth_date', 'hash']));
+        unset($paramas['auth_date']);
+
+        return $paramas;
     }
 }

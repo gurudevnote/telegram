@@ -1,5 +1,5 @@
 {
-    "name": "socialiteproviders/telegram",
+    "name": "gurudevnote/telegram",
     "description": "Telegram Authentication Provider for Laravel Socialite",
     "license": "MIT",
     "keywords": [
